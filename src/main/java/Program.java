@@ -7,7 +7,10 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Updates;
 import com.mongodb.client.result.UpdateResult;
+import org.bson.BsonDocument;
+import org.bson.BsonInt32;
 import org.bson.Document;
+import org.bson.types.BasicBSONList;
 import org.neo4j.driver.v1.*;
 
 import javax.print.Doc;
@@ -56,6 +59,9 @@ public class Program {
                         break;
                     case 2:
                         creerStructureMiroir();
+                        break;
+                    case 3:
+                        rechercheDeDocument();
                         break;
                     case 0:
                         quitter();
@@ -129,45 +135,52 @@ public class Program {
         // Récupére les documents dans la collection index
         FindIterable<Document> documentsIndex = collectionIndexMongo.find();
 
-        List<DocumentIndex> listIndex = new ArrayList<>();
-        HashMap<String, DocumentIndexInverse> mapIndexInverse = new HashMap<>();
-
-        // Parcours les documents de la collection index
-        for (Document index : documentsIndex) {
-            DocumentIndex art = gson.fromJson(index.toJson(), DocumentIndex.class);
-            for (String mot : art.getMotsCles()) {
-                Document document = collectionIndexInverseMongo.find(Filters.eq("mot", mot)).first();
-                if(document == null) {
-                    // Enregistrer le document dans la collection IndexInverse
-                    List<Integer> idDocuments = new ArrayList<>();
-                    idDocuments.add(art.getId());
-                    DocumentIndexInverse doc = new DocumentIndexInverse(mot,idDocuments);
-                    mapIndexInverse.put(doc.getMot(), doc);
-
-                    //Document documentIndexInverse = Document.parse(gson.toJson(art));
-                    //collectionIndexInverseMongo.insertOne(documentIndexInverse);
-                }
-                else {
-                    // Ajouter l'id dans le tableau des documents pour un mo dans la collection IndexInverse
-                    mapIndexInverse.get(mot).addIdDocument(art.getId());
-
+        for (Document d: documentsIndex) {
+            DocumentIndex art = gson.fromJson(d.toJson(), DocumentIndex.class);
+            for (String mot: art.getMotsCles()) {
+                Document dex = collectionIndexInverseMongo.find(Filters.eq("mot", mot)).first();
+                if (dex != null) {
+                    //Contenu de l'id article
+                    BsonDocument idObj = new BsonDocument();
+                    idObj.append("documents", new BsonInt32(art.getId()));
+                    BsonDocument update = new BsonDocument("$addToSet", idObj);
+                    // Mise à jour de la collection
+                    collectionIndexInverseMongo.updateOne(Filters.eq("mot", mot), update);
+                } else {
+                    BasicBSONList listeArticles = new BasicBSONList();
+                    listeArticles.put(0, art.getId());
+                    Document newDoc = new Document("mot", mot)
+                            .append("articles", listeArticles );
+                    // Insertion du document dans la collection
+                    collectionIndexInverseMongo.insertOne(newDoc);
                 }
             }
         }
-
-        int test = 0;
     }
 
     private static void rechercheDeDocument() {
         String motCle;
-        System.out.println("Saisir mot clé");
+        sc.nextLine();
+        System.out.println("Saisir un mot que vous recherchez :");
         motCle = sc.nextLine();
 
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-//        Document document = collectionIndexInverseMongo.find(Filters.eq("mot", motCle));
-//        for (Document doc : document) {
-//            System.out.println(gson.toJson(doc));
-//        }
+        FindIterable<Document> documentIndex = collectionIndexInverseMongo.find(Filters.eq("mot", motCle));
+
+        // Connexion à la base Neo4J
+        sessionNeo = driverNeo.session();
+
+        for (Document d : documentIndex) {
+            DocumentIndexInverse indexInverse = gson.fromJson(d.toJson(), DocumentIndexInverse.class);
+            List<Integer> idDesDocuments = indexInverse.getDocuments();
+            StatementResult result = sessionNeo.run( "match (n:Article) WHERE ID(n) IN " + idDesDocuments +" return n.titre as titre ORDER BY n.titre ASC");
+            while (result.hasNext()) {
+                // Pour chaque article creer un document Index et l'insérer
+                Record articleResult = result.next();
+                System.out.println(articleResult.get("titre").asString());
+            }
+       }
+        // Fermeture de la session Neo
+        sessionNeo.close();
     }
     /**
      * Clôture l'application et ferme tous les services
