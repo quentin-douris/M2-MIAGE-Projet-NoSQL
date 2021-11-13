@@ -60,6 +60,9 @@ public class Program {
                     case 2:
                         creerStructureMiroir();
                         break;
+                    case 3:
+                        rechercheDeDocument();
+                        break;
                     case 0:
                         quitter();
                         break;
@@ -144,7 +147,7 @@ public class Program {
                     // Mise à jour de la collection
                     collectionIndexInverseMongo.updateOne(Filters.eq("mot", mot), update);
                 } else {
-                    BasicBSONList listeArticles = new BasicBSONList ();
+                    BasicBSONList listeArticles = new BasicBSONList();
                     listeArticles.put(0, art.getId());
                     Document newDoc = new Document("mot", mot)
                             .append("articles", listeArticles );
@@ -157,14 +160,27 @@ public class Program {
 
     private static void rechercheDeDocument() {
         String motCle;
-        System.out.println("Saisir mot clé");
+        sc.nextLine();
+        System.out.println("Saisir un mot que vous recherchez :");
         motCle = sc.nextLine();
 
-        Gson gson = new GsonBuilder().setPrettyPrinting().create();
-//        Document document = collectionIndexInverseMongo.find(Filters.eq("mot", motCle));
-//        for (Document doc : document) {
-//            System.out.println(gson.toJson(doc));
-//        }
+        FindIterable<Document> documentIndex = collectionIndexInverseMongo.find(Filters.eq("mot", motCle));
+
+        // Connexion à la base Neo4J
+        sessionNeo = driverNeo.session();
+
+        for (Document d : documentIndex) {
+            DocumentIndexInverse indexInverse = gson.fromJson(d.toJson(), DocumentIndexInverse.class);
+            List<Integer> idDesDocuments = indexInverse.getDocuments();
+            StatementResult result = sessionNeo.run( "match (n:Article) WHERE ID(n) IN " + idDesDocuments +" return n.titre as titre ORDER BY n.titre ASC");
+            while (result.hasNext()) {
+                // Pour chaque article creer un document Index et l'insérer
+                Record articleResult = result.next();
+                System.out.println(articleResult.get("titre").asString());
+            }
+       }
+        // Fermeture de la session Neo
+        sessionNeo.close();
     }
     /**
      * Clôture l'application et ferme tous les services
