@@ -63,6 +63,9 @@ public class Program {
                     case 3:
                         rechercheDeDocument();
                         break;
+                    case 4:
+                        auteursAyantPlusArticles();
+                        break;
                     case 0:
                         quitter();
                         break;
@@ -100,7 +103,7 @@ public class Program {
 
 
     /**
-     * Créer une nouvelle collection dans MongoDB
+     * 3.1. Créer une nouvelle collection dans MongoDB
      */
     private static void creerCollectionIndex() {
         // Connexion à la base Neo4J
@@ -129,7 +132,7 @@ public class Program {
 
 
     /**
-     * Création d'une structure miroir sur MongoDB
+     * 3.3. Création d'une structure miroir sur MongoDB
      */
     private static void creerStructureMiroir() {
         // Récupére les documents dans la collection index
@@ -158,6 +161,9 @@ public class Program {
         }
     }
 
+    /**
+     * 3.4. Recherche de document
+     */
     private static void rechercheDeDocument() {
         String motCle;
         sc.nextLine();
@@ -182,6 +188,26 @@ public class Program {
         // Fermeture de la session Neo
         sessionNeo.close();
     }
+
+    /**
+     * 3.5. Retourne les auteurs ayant écrits le plus d'articles (résultat retourné par ordre croissant du nombre d'article)
+     */
+    private static void auteursAyantPlusArticles() {
+        System.out.println("Les 10 auteurs ayant écrit le plus d'articles");
+        // Connexion à la base Neo4J
+        sessionNeo = driverNeo.session();
+
+        // Requête pour récupérer les articles
+        StatementResult result = sessionNeo.run( "MATCH(aut:Auteur)-[e:Ecrire]-(art:Article) return aut.nom as nom, count(e) as nbArticle ORDER BY nbArticle DESC LIMIT 10");
+        while (result.hasNext()) {
+            // Pour chaque enregistrement au parcours
+            Record record = result.next();
+            System.out.println("\t" + record.get("nbArticle").asInt() + " - " + record.get("nom").asString());
+        }
+        // Fermeture de la session Neo
+        sessionNeo.close();
+    }
+
     /**
      * Clôture l'application et ferme tous les services
      */
