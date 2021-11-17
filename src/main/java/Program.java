@@ -1,11 +1,8 @@
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.mongodb.MongoClient;
-import com.mongodb.client.FindIterable;
-import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
-import com.mongodb.client.model.Filters;
-import com.mongodb.client.model.Updates;
+import com.mongodb.client.*;
+import com.mongodb.client.model.*;
 import com.mongodb.client.result.UpdateResult;
 import org.bson.BsonDocument;
 import org.bson.BsonInt32;
@@ -65,6 +62,9 @@ public class Program {
                         break;
                     case 4:
                         auteursAyantPlusArticles();
+                        break;
+                    case 5:
+                         rechercheDeDocumentAvancee();
                         break;
                     case 0:
                         quitter();
@@ -206,6 +206,83 @@ public class Program {
         }
         // Fermeture de la session Neo
         sessionNeo.close();
+    }
+
+    /**
+     * 3.6. Recherche de document avancée
+     */
+    private static void rechercheDeDocumentAvancee() {
+        int nbMots = 0;
+        int cpt = 0;
+        System.out.println("Veuillez saisir le nombre de mots que vous voulez saisir : ");
+        nbMots = sc.nextInt();
+        List<String> mots = new ArrayList<>();
+        ArrayList<RechercheAvancee> resultatRecherche = new ArrayList<>();
+
+        /*do {
+            System.out.print("Saisir le mot n° " + cpt + " : ");
+            sc.nextLine();
+            String m = sc.nextLine();
+            mots.add(m);
+            cpt++;
+        } while (cpt < nbMots);*/
+        mots.add("with");
+        mots.add("new");
+        mots.add("systems");
+
+        // Formate les mots saisi pour être paramètre de la requête
+        StringBuilder sr = new StringBuilder();
+        int cptSr = 0;
+        for(String mot : mots) {
+            if(cptSr != 0 && cptSr != mots.size()) {
+                sr.append(",");
+            }
+            sr.append("'" + mot + "'");
+            cptSr++;
+        }
+
+        // Exécution de ma requête
+        AggregateIterable<Document> documents =
+                collectionIndexInverseMongo.aggregate(java.util.Arrays.asList(
+                        Document.parse("{$match : { mot : {$in : [ " + sr.toString() +"]}}}"),
+                        Document.parse("{$unwind: \"$documents\"}"),
+                        Document.parse("{$group: {_id:\"$documents\",nbMots: {$sum :1}}}"),
+                        Document.parse("{$sort :{nbMots : -1}}"),
+                        Document.parse("{$limit:10}")
+                ));
+
+        for (MongoCursor<Document> it = documents.iterator(); it.hasNext();){
+            Document doc2 = it.next();
+            System.out.println(doc2.toJson());
+
+            RechercheAvancee item = gson.fromJson(doc2.toJson(), RechercheAvancee.class);
+            resultatRecherche.add(item);
+        }
+
+        // Connexion à la base Neo4J
+        sessionNeo = driverNeo.session();
+
+
+        List<Integer> idDesDocuments = new ArrayList<Integer>();
+        for (RechercheAvancee res : resultatRecherche) {
+            idDesDocuments.add(res.getId());
+        }
+            StatementResult result = sessionNeo.run( "match (n:Article) WHERE ID(n) IN " + idDesDocuments +" return ID(n) as id, n.titre as titre");
+            while (result.hasNext()) {
+                Record articleResult = result.next();
+                for (RechercheAvancee r : resultatRecherche) {
+                    if (articleResult.get("id").asInt() == r.getId()) {
+                        r.setTitre(articleResult.get("titre").asString());
+                    }
+                }
+            }
+
+            for (RechercheAvancee r : resultatRecherche) {
+                System.out.println(r.toString());
+            }
+        // Fermeture de la session Neo
+        sessionNeo.close();
+
     }
 
     /**
