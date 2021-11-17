@@ -153,7 +153,7 @@ public class Program {
                     BasicBSONList listeArticles = new BasicBSONList();
                     listeArticles.put(0, art.getId());
                     Document newDoc = new Document("mot", mot)
-                            .append("articles", listeArticles );
+                            .append("documents", listeArticles );
                     // Insertion du document dans la collection
                     collectionIndexInverseMongo.insertOne(newDoc);
                 }
