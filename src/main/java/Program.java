@@ -3,22 +3,18 @@ import com.google.gson.GsonBuilder;
 import com.mongodb.MongoClient;
 import com.mongodb.client.*;
 import com.mongodb.client.model.*;
-import com.mongodb.client.result.UpdateResult;
 import org.bson.BsonDocument;
 import org.bson.BsonInt32;
 import org.bson.Document;
 import org.bson.types.BasicBSONList;
 import org.neo4j.driver.v1.*;
-
-import javax.print.Doc;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Scanner;
 
 public class Program {
     private static final int CHOIX_MIN = -1;
-    private static final int CHOIX_MAX = 8;
+    private static final int CHOIX_MAX = 5;
 
     private static int choixUtilisateur = 0;
     private static boolean finish = true;
@@ -84,15 +80,11 @@ public class Program {
     private static void afficherMenu(){
         System.out.println("\n\t\t\t * Menu * ");
         System.out.println("");
-        System.out.println("\t1 - Lister les films disponibles");
-        System.out.println("\t2 - Lister les personnes disponibles");
-        System.out.println("\t3 - Afficher les 3 films les mieux notés");
-        System.out.println("\t4 - Afficher au plus 5 films proches");
-        System.out.println("\tPour aller plus loin :");
-        System.out.println("\t5 - Créer un nouveau film");
-        System.out.println("\t6 - Ajouter une limite d'âge à un film");
-        System.out.println("\t7 - Ajouter une Personne qui a joué dans un film");
-        System.out.println("\t8 - Supprimer une Personne avec toutes ses relations");
+        System.out.println("\t1 - Créer une nouvelle collection dans MongoDB");
+        System.out.println("\t2 - Création d'une structure miroir sur MongoDB");
+        System.out.println("\t3 - Recherche de document");
+        System.out.println("\t4 - Les auteurs ayant écrits le plus d'articles");
+        System.out.println("\t5 - Recherche de document avancée");
         System.out.println("");
         System.out.println("\t0 - Quitter l'application");
         System.out.println("");
@@ -213,48 +205,48 @@ public class Program {
      */
     private static void rechercheDeDocumentAvancee() {
         int nbMots = 0;
-        int cpt = 0;
-        System.out.println("Veuillez saisir le nombre de mots que vous voulez saisir : ");
-        nbMots = sc.nextInt();
+        int cpt = 1;
         List<String> mots = new ArrayList<>();
         ArrayList<RechercheAvancee> resultatRecherche = new ArrayList<>();
+        List<Integer> idDesDocuments = new ArrayList<>();
 
-        /*do {
-            System.out.print("Saisir le mot n° " + cpt + " : ");
-            sc.nextLine();
+        // Demande le nombre de mot à saisir
+        System.out.println("Veuillez saisir le nombre de mots que vous voulez saisir : ");
+        nbMots = sc.nextInt();
+        sc.nextLine();
+
+        // Saisi des mots
+        while (cpt <= nbMots) {
+            System.out.println("Saisir le mot n° " + cpt + " : ");
             String m = sc.nextLine();
             mots.add(m);
             cpt++;
-        } while (cpt < nbMots);*/
-        mots.add("with");
-        mots.add("new");
-        mots.add("systems");
+        }
 
         // Formate les mots saisi pour être paramètre de la requête
         StringBuilder sr = new StringBuilder();
         int cptSr = 0;
-        for(String mot : mots) {
-            if(cptSr != 0 && cptSr != mots.size()) {
+        for (String mot : mots) {
+            if (cptSr != 0 && cptSr != mots.size()) {
                 sr.append(",");
             }
             sr.append("'" + mot + "'");
             cptSr++;
         }
 
-        // Exécution de ma requête
+        // Exécution de la requêteMongoDB
         AggregateIterable<Document> documents =
                 collectionIndexInverseMongo.aggregate(java.util.Arrays.asList(
-                        Document.parse("{$match : { mot : {$in : [ " + sr.toString() +"]}}}"),
+                        Document.parse("{$match : { mot : {$in : [ " + sr.toString() + "]}}}"),
                         Document.parse("{$unwind: \"$documents\"}"),
                         Document.parse("{$group: {_id:\"$documents\",nbMots: {$sum :1}}}"),
                         Document.parse("{$sort :{nbMots : -1}}"),
                         Document.parse("{$limit:10}")
                 ));
 
-        for (MongoCursor<Document> it = documents.iterator(); it.hasNext();){
+        // Construit la collection d'objet RechercheAvancee
+        for (MongoCursor<Document> it = documents.iterator(); it.hasNext(); ) {
             Document doc2 = it.next();
-            System.out.println(doc2.toJson());
-
             RechercheAvancee item = gson.fromJson(doc2.toJson(), RechercheAvancee.class);
             resultatRecherche.add(item);
         }
@@ -262,28 +254,31 @@ public class Program {
         // Connexion à la base Neo4J
         sessionNeo = driverNeo.session();
 
-
-        List<Integer> idDesDocuments = new ArrayList<Integer>();
+        // Construction d'une liste d'id pour la requête Neo4J
         for (RechercheAvancee res : resultatRecherche) {
             idDesDocuments.add(res.getId());
         }
-            StatementResult result = sessionNeo.run( "match (n:Article) WHERE ID(n) IN " + idDesDocuments +" return ID(n) as id, n.titre as titre");
-            while (result.hasNext()) {
-                Record articleResult = result.next();
-                for (RechercheAvancee r : resultatRecherche) {
-                    if (articleResult.get("id").asInt() == r.getId()) {
-                        r.setTitre(articleResult.get("titre").asString());
-                    }
+
+        // Exécution de la requête Neo4J en fonction des résultats obtenus précédement
+        StatementResult result = sessionNeo.run("match (n:Article) WHERE ID(n) IN " + idDesDocuments + " return ID(n) as id, n.titre as titre");
+        while (result.hasNext()) {
+            Record articleResult = result.next();
+            for (RechercheAvancee r : resultatRecherche) {
+                if (articleResult.get("id").asInt() == r.getId()) {
+                    r.setTitre(articleResult.get("titre").asString());
                 }
             }
+        }
 
-            for (RechercheAvancee r : resultatRecherche) {
-                System.out.println(r.toString());
-            }
+        // Affichage des résultats
+        for (RechercheAvancee r : resultatRecherche) {
+            System.out.println(r.toString());
+        }
+
         // Fermeture de la session Neo
         sessionNeo.close();
-
     }
+
 
     /**
      * Clôture l'application et ferme tous les services

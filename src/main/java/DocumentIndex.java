@@ -1,5 +1,8 @@
 import java.util.List;
 
+/**
+ * Model pour les documents présents dans la collection Index de MongoDB
+ */
 public class DocumentIndex {
     private int id;
     private List<String> motsCles;

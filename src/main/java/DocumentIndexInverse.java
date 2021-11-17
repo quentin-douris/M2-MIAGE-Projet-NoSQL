@@ -1,5 +1,8 @@
 import java.util.List;
 
+/**
+ * Model des documents présents dans la collection MongoDB IndexInverse
+ */
 public class DocumentIndexInverse {
     private String mot;
     private List<Integer> documents;
