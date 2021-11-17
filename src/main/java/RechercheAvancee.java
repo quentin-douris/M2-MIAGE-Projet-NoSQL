@@ -1,3 +1,6 @@
+/**
+ * Model pour la fonction de recherche avancée
+ */
 public class RechercheAvancee {
     private int _id;
     private String titre;
